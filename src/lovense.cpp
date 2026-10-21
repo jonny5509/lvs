@@ -23,11 +23,11 @@ static NimBLECharacteristic *pLovenseCharacteristic = nullptr;
 
 class ConnectionEventHandler : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *pServer) {
-        Serial.println("Client connected to the lovense service");
+        (void)pServer;
     }
 
     void onDisconnect(NimBLEServer *pServer) {
-        Serial.println("Client disconnected from the lovense service");
+        (void)pServer;
     }
 };
 
@@ -115,10 +115,6 @@ std::string set_vibration_speed(const std::string& command) {
     // Convert the integer speed value to a floating-point value between 0.0 and 1.0
     float speed = static_cast<float>(speedInt) / 20.0f;
 
-    // For demonstration purposes, let's just print the speedFloat value to Serial
-    Serial.print("Vibration Speed: ");
-    Serial.println(speed);
-
     muse_set_intensity(speed);
 
     return "OK;";
@@ -132,13 +128,7 @@ public:
             return; // No value received, nothing to do
         }
 
-        Serial.print("Received Value: ");
-        Serial.println(value.c_str());
-
         std::string response = generate_response(value);
-
-        Serial.print("Response Value: ");
-        Serial.println(response.c_str());
 
         // Send the response
         pCharacteristic->setValue(response);
