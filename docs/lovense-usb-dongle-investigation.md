@@ -8,34 +8,32 @@ The target board uses an ESP32-D0WD-V3 and a CH340 USB-to-UART bridge. Windows e
 
 ## What the public protocol notes establish
 
-The Buttplug/Stpihkal notes for the older Lovense dongle describe a serial-over-USB interface at 115200 baud and JSON commands including:
+The older Lovense dongle has a documented community-reverse-engineered serial protocol at 115200 baud, 8 data bits, no parity, 1 stop bit. A DEF CON 27 presentation describes CRLF-terminated commands and a simple initial handshake:
 
-- `{"type":"usb","func":"init"}`
-- `{"type":"usb","func":"search"}`
-- `{"type":"usb","func":"stopSearch"}`
-- `{"type":"toy","func":"search"}`
-- `{"type":"toy","func":"stopSearch"}`
-- `{"type":"toy","func":"statuss"}`
-- `{"type":"toy","func":"command","id":"…","cmd":"…"}`
+- Send `DeviceType;\r\n`; a documented response format is `D:105:<12-hex-digit-MAC>;\n`.
+- JSON commands include `{"type":"usb","func":"init"}`, `{"type":"usb","func":"search"}`, and `{"type":"usb","func":"stopSearch"}`.
+- Toy commands include `{"type":"toy","func":"search"}`, `{"type":"toy","func":"stopSearch"}`, `{"type":"toy","func":"statuss"}`, `{"type":"toy","func":"connect","eager":1,"id":"…" }`, and `{"type":"toy","func":"command","id":"…","cmd":"Vibrate:20;" }`.
 
-Source: https://github.com/buttplugio/stpihkal/issues/35
+Sources:
+- https://github.com/buttplugio/stpihkal/issues/35
+- https://www.slideshare.net/slideshow/def-con-27-amea-adventures-in-smart-buttplug-penetration-testing/231854636
 
-These notes list commands but do not document the complete response/event format or establish that current Lovense Connect versions accept a generic CH340 COM port. The newer Lovense dongle variant is HID, which this hardware cannot impersonate directly.
+The community notes do not establish that current Lovense Connect versions accept a generic CH340 COM port with non-Lovense USB IDs. The newer dongle variant uses USB HID, which this hardware cannot impersonate directly.
 
 ## Existing firmware gap
 
-At the rollback baseline, `src/bluetooth_service.cpp` advertises a BLE peripheral named `LVS-Gateway01`. `src/lovense.cpp` implements a BLE GATT characteristic for toy-style text commands. That is not the same interface as the USB dongle protocol.
+At the rollback baseline, `src/bluetooth_service.cpp` advertises a BLE peripheral named `LVS-Gateway01`. `src/lovense.cpp` implements a BLE GATT characteristic for toy-style text commands. `src/muse.cpp` changes manufacturer data in BLE advertisements to represent intensity states. These pieces do not yet implement the USB serial dongle protocol or scan/connect to an external BLE toy as a central.
 
 Also, `Serial` is currently used for diagnostic logging. A serial protocol implementation must keep logs off the protocol stream (or put logs behind a compile-time flag), parse framed JSON commands, and emit only protocol-compatible responses on the COM port.
 
 ## Safe implementation sequence
 
-1. Confirm whether the target Lovense Connect build accepts a COM-port dongle with non-Lovense USB IDs. Do not assume that changing the COM port's friendly name is sufficient.
-2. Capture known-good request/response traffic from a genuine older serial Lovense dongle, if available, at 115200 baud. Include line endings, timing, initialization events, search results, and toy status events.
-3. Implement a separate, opt-in serial protocol mode on an experimental branch, keeping debug logs off the protocol stream.
-4. Connect serial search/command events to a real BLE-central toy driver. The current GATT peripheral implementation alone does not provide this bridge.
+1. Test whether the target Lovense Connect version enumerates and opens a generic COM port, or requires the Lovense adapter's USB identity. The firmware cannot change the CH340's USB IDs.
+2. Obtain/capture known-good request/response traffic from an older genuine serial Lovense dongle at 115200 baud, including initialization, search results, status events, and command responses. The published command list alone is not a complete specification.
+3. Implement a separate, opt-in serial protocol mode on this experimental branch, keeping debug logs off the protocol stream.
+4. Implement a BLE-central driver for the actual non-Lovense toy and route serial commands to it. The current BLE peripheral/advertising implementation is not that driver.
 5. Test against Windows and the target Connect version before considering any merge.
 
 ## Current status
 
-No changes to the default `main` branch. The experimental branch is a place to continue the protocol work without disturbing the known rollback point. A complete compatible implementation cannot be verified from the command list alone.
+No changes to the default `main` branch. The experimental branch records the verified constraints and protocol leads without disturbing the rollback point. A complete compatible implementation cannot be verified from the currently available command list alone.
