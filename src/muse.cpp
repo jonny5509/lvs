@@ -11,6 +11,7 @@ static uint16_t MANUFACTURER_ID = 0xFFF0;
 
 // Documented payloads for compatible MuSE/LoveSpouse toys.
 static volatile uint8_t _intensity_value = 0;
+static volatile uint32_t _command_generation = 1;
 static volatile bool _stopping = false;
 
 uint8_t manufacturerDataList[][MANUFACTURER_DATA_LENGTH] = {
@@ -61,15 +62,17 @@ void set_manufacturer_data(uint8_t index) {
 
 void muse_advertising_task(void *pvParameters) {
   (void)pvParameters;
-  uint8_t lastSetIntensity = 0xFF;
+  uint32_t lastGeneration = 0;
 
   while (!_stopping) {
-    const uint8_t requestedIntensity = _intensity_value;
-    // Do not repeatedly stop/restart advertising while the intensity is stable:
-    // that can interrupt BLE discovery and toy command broadcasts.
-    if (requestedIntensity != lastSetIntensity) {
+    const uint32_t generation = _command_generation;
+    if (generation != lastGeneration) {
+      const uint8_t requestedIntensity = _intensity_value;
+      // Refresh once per received command, even if the requested level is the
+      // same as the previous one. Connecting a phone stops initial advertising,
+      // so repeating a command must still restart the toy-control broadcast.
       set_manufacturer_data(requestedIntensity);
-      lastSetIntensity = requestedIntensity;
+      lastGeneration = generation;
     }
     vTaskDelay(pdMS_TO_TICKS(20));
   }
@@ -80,20 +83,22 @@ void muse_advertising_task(void *pvParameters) {
 
 void muse_set_intensity(float intensity_percent) {
   // Stop + three documented all-channel speed levels.
-  if (std::isnan(intensity_percent) || intensity_percent <= 0.0f) {
-    _intensity_value = 0;
-    return;
-  }
-  if (intensity_percent >= 1.0f) {
-    _intensity_value = 3;
-    return;
+  uint8_t level = 0;
+  if (!std::isnan(intensity_percent) && intensity_percent > 0.0f) {
+    if (intensity_percent >= 1.0f) {
+      level = 3;
+    } else {
+      level = static_cast<uint8_t>(lroundf(intensity_percent * 3.0f));
+      if (level > 3) {
+        level = 3;
+      }
+    }
   }
 
-  uint8_t level = static_cast<uint8_t>(lroundf(intensity_percent * 3.0f));
-  if (level > 3) {
-    level = 3;
-  }
   _intensity_value = level;
+  // Increment even for repeated levels so the broadcast is re-armed for each
+  // incoming app command after BLE connection events.
+  ++_command_generation;
 }
 
 void muse_start() {
