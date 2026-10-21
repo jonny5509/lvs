@@ -1,40 +1,54 @@
-# Lovense USB dongle compatibility investigation
+# Lovense-compatible BLE and USB dongle investigation
 
 This is an experimental implementation branch. It does not change the default `main` branch.
 
-## Hardware constraint
+## Target and architecture
 
-The target board uses an ESP32-D0WD-V3 and a CH340 USB-to-UART bridge. Windows enumerates the CH340 as a serial/COM device. Firmware on this ESP32 cannot change the CH340's USB descriptors or make that chip enumerate as native USB HID.
+The goal is to let Lovense Connect on a phone recognize this ESP32 as a BLE toy-like endpoint and to relay vibration commands into the existing MuSE-compatible BLE advertisement implementation. Windows Lovense Connect compatibility is a separate target and is not confirmed.
 
-## Protocol references
+The board uses an ESP32-D0WD-V3 and a CH340 USB-to-UART bridge. Windows enumerates the CH340 as a serial/COM device. Firmware on this ESP32 cannot change the CH340's USB descriptors or make that chip enumerate as native USB HID.
 
-Community-reverse-engineered notes describe an older Lovense dongle using serial-over-USB at 115200 baud. Known command names include:
+## BLE profile implemented
 
-- Text command `DeviceType;` (a reported response is `D:105:<12-hex-digit-MAC>;`)
-- JSON commands `{"type":"usb","func":"init"}`, `{"type":"usb","func":"search"}`, and `{"type":"usb","func":"stopSearch"}`
-- JSON toy commands `{"type":"toy","func":"search"}`, `{"type":"toy","func":"stopSearch"}`, `{"type":"toy","func":"statuss"}`, and `{"type":"toy","func":"command","id":"…","cmd":"Vibrate:20;" }`
+`src/lovense.cpp` now uses the commonly documented legacy Lovense GATT layout:
 
-Sources:
-- https://github.com/buttplugio/stpihkal/issues/35
-- https://www.slideshare.net/slideshow/def-con-27-amea-adventures-in-smart-buttplug-penetration-testing/231854636
+- Service: `0000fff0-0000-1000-8000-00805f9b34fb`
+- RX / response characteristic: `0000fff1-0000-1000-8000-00805f9b34fb` (read + notify)
+- TX / command characteristic: `0000fff2-0000-1000-8000-00805f9b34fb` (write + write without response)
 
-These sources do not fully specify the JSON response/event envelopes or prove that current Lovense Connect versions accept a generic CH340 COM port. Newer dongle variants use USB HID, which this hardware cannot impersonate directly.
+Commands such as `DeviceType;`, `Battery;`, `Status:1;`, `Vibrate:n;`, and `PowerOff;` are handled. The implementation advertises as `LVS-Gateway01`, but the correct GATT profile alone does not guarantee the official app will recognize it. Lovense device generations can use different GATT services, device identities, and app-specific discovery behavior.
 
-## What this branch adds
+## MuSE-compatible advertisement control
 
-- `src/serial_dongle.h` and `src/serial_dongle.cpp`: line-framed serial parser at 115200 baud for the documented text commands and the known JSON command names.
-- `platformio.ini`: ArduinoJson dependency for bounded JSON parsing.
-- `src/main.cpp`: starts the experimental serial protocol handler and polls it from the main loop.
-- The serial handler silences ESP-IDF logs so diagnostic output does not mix with protocol bytes.
+`src/muse.cpp` broadcasts manufacturer-data patterns for stop and three intensity levels. The intensity mapping was corrected so 100% maps to the highest supported single-channel pattern (index 3), rather than accidentally selecting a dual-channel stop pattern (index 4).
 
-Text `DeviceType;`, `Battery;`, `Status:1;`, `Vibrate:n;`, and `PowerOff;` are handled. Vibration commands map to the existing `muse_set_intensity()` advertising implementation. The JSON response envelopes are **provisional guesses**, not verified Lovense-compatible responses. Search currently does not discover a real external BLE toy and deliberately does not fabricate a discovery event.
+This is a broadcast-based control approach, not a BLE-central connection to a real toy. Whether a particular LoveSpouse or MuSE model accepts these advertisements must be verified against the actual toy model and its protocol. The current firmware does not scan for toys, connect to toys as a BLE central, or independently discover and route to multiple toys.
 
-## Important limitations and next test
+## Experimental legacy USB serial handler
 
-1. Build the `esp32dev` PlatformIO environment and flash only the experimental branch.
-2. Open the CH340 COM port at 115200 baud, 8-N-1. Send `DeviceType;\r\n` and confirm a `D:105:…;` response.
-3. Capture genuine legacy dongle traffic for `usb/init`, `usb/search`, toy discovery, status and command responses. Replace the provisional JSON replies with captured response formats.
-4. Test whether the exact Lovense Connect for Windows version accepts a generic COM port. The firmware cannot change the CH340 USB identity.
-5. Implement a BLE-central driver only after identifying the actual non-Lovense toy protocol. The current `muse.cpp` broadcasts manufacturer-data packets; it does not connect to the toy.
+The branch also contains `src/serial_dongle.cpp`, an experimental line-framed handler at 115200 baud for a small set of community-reported legacy serial dongle commands. The documented command names include:
 
-No successful PlatformIO build or Windows Lovense Connect interoperability test has been performed in this environment. Treat this as an experimental starting point, not a working dongle replacement.
+- `DeviceType;`
+- `Battery;`
+- `Status:1;`
+- JSON commands such as `usb/init`, `usb/search`, `toy/search`, and `toy/command`
+
+The JSON response envelopes are provisional guesses, not verified Lovense-compatible responses. Search responses do not discover actual toys and should not be treated as proof of a working dongle.
+
+## Platform constraints
+
+- **Phone:** can connect to BLE peripherals directly, but official Lovense Connect recognition still needs a real app test.
+- **Windows:** Lovense's own documentation says Lovense Remote on Windows requires its Lovense USB Bluetooth Adapter. This board's CH340 is a serial adapter, not that Bluetooth adapter. Serial protocol emulation may work only with software that explicitly supports the legacy COM-port dongle protocol; current Windows app compatibility is unverified.
+- **Both platforms:** no successful end-to-end app + toy test has been performed.
+
+## Build and hardware test plan
+
+1. Build the `esp32dev` PlatformIO environment using the GitHub Actions firmware-build workflow.
+2. Flash only this experimental branch to the existing ESP32 board.
+3. On a phone, scan for `LVS-Gateway01`, connect, enumerate FFF0/FFF1/FFF2, subscribe to FFF1 notifications, and send `DeviceType;` and `Vibrate:20;` to FFF2.
+4. Verify the exact LoveSpouse and MuSE models react to the broadcast patterns.
+5. Test the official Lovense Connect app separately; record whether it discovers and accepts the ESP32.
+6. For Windows, test the exact Lovense Connect version and record whether it supports the CH340 COM port. Do not assume that a successful serial loopback means the app accepts it.
+7. Before relying on this for real toys, capture genuine toy/dongle traffic and replace any guessed responses with measured protocol behavior.
+
+Treat this as an improved experimental starting point, not a verified replacement for an official Lovense dongle.
