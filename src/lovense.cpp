@@ -26,6 +26,11 @@ static NimBLECharacteristic *pLovenseRxCharacteristic = nullptr;
 class ConnectionEventHandler : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *pServer) override {
         (void)pServer;
+        // A BLE peripheral normally stops advertising when a central connects.
+        // Re-arm advertising so compatible MuSE/LoveSpouse toys can continue
+        // to receive manufacturer-data control broadcasts while the phone is
+        // connected. This behavior still needs verification on the target toys.
+        NimBLEDevice::startAdvertising();
     }
 
     void onDisconnect(NimBLEServer *pServer) override {
