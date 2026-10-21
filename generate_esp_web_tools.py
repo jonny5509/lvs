@@ -18,9 +18,9 @@ def fill_manifest(github_username, github_project, github_build_number):
         "funding_url": f"https://github.com/{github_username}/{github_project}/contributors",
         "builds": [
             {
-                "chipFamily": "ESP32-S3",
+                "chipFamily": "ESP32",
                 "parts": [
-                    {"path": "firmware/bootloader.bin", "offset": 0},
+                    {"path": "firmware/bootloader.bin", "offset": 4096},
                     {"path": "firmware/partitions.bin", "offset": 32768},
                     {"path": "firmware/boot_app0.bin", "offset": 57344},
                     {"path": "firmware/firmware.bin", "offset": 65536}
