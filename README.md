@@ -1,29 +1,50 @@
-# LVS-Gateway (PlatformIO fix)
+# LVS-Gateway (PlatformIO)
 
-This repository contains the LVS-Gateway ESP32 firmware, based on [IngeniousKink/LVS-Gateway](https://github.com/IngeniousKink/LVS-Gateway).
+ESP32 firmware for LVS-Gateway, based on [IngeniousKink/LVS-Gateway](https://github.com/IngeniousKink/LVS-Gateway).
 
-## Build and upload on Windows
+## Build and flash a classic ESP32
 
-1. Install VS Code and the PlatformIO IDE extension.
-2. Clone this repository and open the folder in VS Code.
-3. Connect your ESP32 with a USB data cable.
-4. In the PlatformIO terminal, run one of the following commands:
+The board detected in the serial log as `ESP32-D0WD-V3` should use the `esp32dev` environment.
 
-```powershell
+1. Install [Visual Studio Code](https://code.visualstudio.com/) and the **PlatformIO IDE** extension.
+2. Clone or download this repository and open the repository folder (the folder containing `platformio.ini`) in VS Code.
+3. Connect the ESP32 with a USB data cable. Close other serial-monitor or flashing apps that may have the port open.
+4. In the PlatformIO terminal, run:
+
+```sh
+pio run -e esp32dev
 pio run -e esp32dev -t upload
+pio device monitor -e esp32dev
 ```
 
-For an ESP32-S3 board, use:
+The first command builds only. The second builds and uploads; the third opens the serial monitor at 115200 baud. If PlatformIO cannot choose the serial port automatically, specify it explicitly:
 
-```powershell
+```sh
+pio run -e esp32dev -t upload --upload-port COM3
+pio device monitor -e esp32dev --port COM3
+```
+
+Replace `COM3` with the port shown by your OS (for example, `/dev/ttyUSB0` on Linux or `/dev/cu.wchusbserialXXXX` on macOS). On Linux, you may need serial-port permissions.
+
+If upload fails with a connection or sync error, hold **BOOT**, start the upload, and release BOOT when the output says it is connecting. Some boards need a brief press of **EN/RESET** after the upload.
+
+## ESP32-S3
+
+For an actual ESP32-S3 board only, use:
+
+```sh
+pio run -e esp32s3
 pio run -e esp32s3 -t upload
+pio device monitor -e esp32s3
 ```
 
-## Fixes included
+## Included build fixes
 
-- Pin NimBLE-Arduino to 1.4.2, which provides the advertising API used by this code.
-- Include Arduino.h in lovense.cpp so Serial is declared.
-- Fix the PowerOff handler to send a zero-vibration command instead of passing an integer to a string-based function.
-- Run Python build scripts explicitly in GitHub Actions so executable file permissions are not required.
+- Pins NimBLE-Arduino to 1.4.2 for the advertising API used by this code.
+- Uses the `esp32dev` PlatformIO target for the classic ESP32-D0WD-V3.
+- Keeps the ESP32-S3 target available as a separate environment.
+- Builds the firmware and prepares ESP Web Tools artifacts in GitHub Actions.
 
-Firmware is built from source; generated web installer files are produced by the CI workflow.
+## Web installer
+
+The web installer is at https://jonny5509.github.io/lvs/. The installer can only flash the firmware that CI successfully builds and publishes; successful compilation alone does not prove that every connected sensor or peripheral is wired/configured correctly.
