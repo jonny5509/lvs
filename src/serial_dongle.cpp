@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <esp_log.h>
 #include <esp_mac.h>
 
 #include "muse.h"
@@ -11,8 +12,6 @@ constexpr size_t kMaxLineLength = 384;
 char lineBuffer[kMaxLineLength];
 size_t lineLength = 0;
 bool overflowed = false;
-bool initialized = false;
-String toyId;
 
 String macString() {
   uint8_t mac[6] = {};
@@ -28,24 +27,10 @@ void writeLine(const String& line) {
   Serial.print("\r\n");
 }
 
-String jsonEscape(const String& input) {
-  String out;
-  out.reserve(input.length() + 8);
-  for (size_t i = 0; i < input.length(); ++i) {
-    const char c = input[i];
-    if (c == '"' || c == '\\') out += '\\';
-    if (c == '\n') { out += "\\n"; continue; }
-    if (c == '\r') { out += "\\r"; continue; }
-    out += c;
-  }
-  return out;
-}
-
 void handleTextCommand(const String& line) {
   if (line == "DeviceType;") {
-    // Legacy serial dongle DeviceType response reported by community protocol notes.
-    // The D:105 identity is a compatibility hypothesis and must be checked against
-    // a capture from a genuine dongle before claiming Connect compatibility.
+    // Community notes report this response for an older serial dongle.
+    // Identity/response behavior still needs validation against a real dongle.
     writeLine("D:105:" + macString() + ";");
     return;
   }
@@ -58,10 +43,9 @@ void handleTextCommand(const String& line) {
     return;
   }
   if (line.startsWith("Vibrate:")) {
-    int end = line.indexOf(';');
+    const int end = line.indexOf(';');
     if (end < 0) return;
-    int level = line.substring(8, end).toInt();
-    level = constrain(level, 0, 20);
+    const int level = constrain(line.substring(8, end).toInt(), 0, 20);
     muse_set_intensity(static_cast<float>(level) / 20.0f);
     writeLine("OK;");
     return;
@@ -74,25 +58,23 @@ void handleTextCommand(const String& line) {
 
 void handleJsonCommand(const String& line) {
   StaticJsonDocument<384> doc;
-  DeserializationError error = deserializeJson(doc, line);
-  if (error) return;
+  if (deserializeJson(doc, line)) return;
 
   const char* type = doc["type"] | "";
   const char* func = doc["func"] | "";
 
-  // These are the public legacy-dongle command names. Exact response/event
-  // envelopes are not fully documented, so this experimental implementation
-  // intentionally labels its response shape as provisional in the docs.
+  // The command names are documented by community reverse engineering.
+  // These JSON response envelopes are provisional; compare with a genuine
+  // adapter capture before expecting Lovense Connect to accept this firmware.
   if (strcmp(type, "usb") == 0 && strcmp(func, "init") == 0) {
-    initialized = true;
     writeLine("{\"type\":\"usb\",\"func\":\"init\",\"result\":true}");
     return;
   }
 
   if (strcmp(type, "usb") == 0 &&
       (strcmp(func, "search") == 0 || strcmp(func, "stopSearch") == 0)) {
-    // The current firmware advertises manufacturer data; it does not scan and
-    // connect to a BLE toy. Do not fabricate a "found toy" event here.
+    // This firmware advertises manufacturer data; it does not scan/connect to
+    // an external BLE toy, so it deliberately does not fabricate discovery.
     writeLine(String("{\"type\":\"usb\",\"func\":\"") + func +
               "\",\"result\":true}");
     return;
@@ -107,12 +89,11 @@ void handleJsonCommand(const String& line) {
   }
 
   if (strcmp(type, "toy") == 0 && strcmp(func, "command") == 0) {
-    const char* command = doc["cmd"] | "";
-    String cmd(command);
+    const String cmd = String(doc["cmd"] | "");
     if (cmd.startsWith("Vibrate:")) {
-      int end = cmd.indexOf(';');
-      String value = end >= 0 ? cmd.substring(8, end) : cmd.substring(8);
-      int level = constrain(value.toInt(), 0, 20);
+      const int end = cmd.indexOf(';');
+      const String value = end >= 0 ? cmd.substring(8, end) : cmd.substring(8);
+      const int level = constrain(value.toInt(), 0, 20);
       muse_set_intensity(static_cast<float>(level) / 20.0f);
     } else if (cmd == "PowerOff;" || cmd == "Stop;") {
       muse_set_intensity(0.0f);
@@ -123,11 +104,9 @@ void handleJsonCommand(const String& line) {
 }  // namespace
 
 void serial_dongle_init() {
-  // Serial.begin(115200) is called in setup(). Suppress ESP-IDF diagnostics so
-  // the COM port is reserved for protocol traffic rather than mixed log output.
+  // The COM port is reserved for protocol bytes. Silence ESP-IDF logs to keep
+  // diagnostics from corrupting the serial command stream.
   esp_log_level_set("*", ESP_LOG_NONE);
-  toyId = macString();
-  initialized = false;
   lineLength = 0;
   overflowed = false;
 }
@@ -142,8 +121,9 @@ void serial_dongle_poll() {
         continue;
       }
       if (lineLength == 0) continue;
+
       lineBuffer[lineLength] = '\0';
-      String line(lineBuffer);
+      const String line(lineBuffer);
       lineLength = 0;
 
       if (line == "DeviceType;" || line == "Battery;" ||
