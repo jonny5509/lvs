@@ -22,7 +22,7 @@ Commands such as `DeviceType;`, `Battery;`, `Status:1;`, `Vibrate:n;`, and `Powe
 
 `src/muse.cpp` broadcasts the documented manufacturer-data prefix `6D B6 43 CE 97 FE 42 7C` and four all-channel commands: stop and three intensity levels. The intensity mapping clamps values before quantization so 100% maps to the highest supported speed rather than a channel-specific payload.
 
-`src/bluetooth_service.cpp` configures a 250 ms advertising interval, matching the community-documented minimum interval for these toy broadcasts. The payload is updated only when the requested intensity changes, rather than stopping and restarting advertising every second. The same BLE radio advertises the app-facing GATT service and the toy-control manufacturer data; the actual phone/app/toy combination still needs a physical test.
+`src/bluetooth_service.cpp` configures a 250 ms advertising interval, matching the community-documented minimum interval for these toy broadcasts. The payload is refreshed when each control command arrives, including repeated commands at the same intensity. This re-arms the broadcast after phone connection events may have stopped advertising. The same BLE radio advertises the app-facing GATT service and the toy-control manufacturer data; the actual phone/app/toy combination still needs a physical test.
 
 This is broadcast-based control, not a BLE-central connection to a real toy. Compatible toys within radio range are expected to receive the same broadcast. Exact compatibility depends on the toy's firmware and manufacturer-data prefix.
 
