@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_mac.h>
 #include "lovense.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
