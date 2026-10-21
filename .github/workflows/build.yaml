@@ -42,17 +42,17 @@ jobs:
         run: pio check --fail-on-defect medium
 
       - name: Build firmware
-        run: pio run -e esp32s3
+        run: pio run -e esp32dev
 
       - name: Prepare ESP Web Tools firmware parts
         run: |
           mkdir -p web/firmware
-          cp .pio/build/esp32s3/bootloader.bin web/firmware/bootloader.bin
-          cp .pio/build/esp32s3/partitions.bin web/firmware/partitions.bin
+          cp .pio/build/esp32dev/bootloader.bin web/firmware/bootloader.bin
+          cp .pio/build/esp32dev/partitions.bin web/firmware/partitions.bin
           BOOT_APP0="$(find ~/.platformio -name boot_app0.bin -type f -print -quit)"
           if [ -z "$BOOT_APP0" ]; then echo "boot_app0.bin not found in PlatformIO packages"; exit 1; fi
           cp "$BOOT_APP0" web/firmware/boot_app0.bin
-          cp .pio/build/esp32s3/firmware.bin web/firmware/firmware.bin
+          cp .pio/build/esp32dev/firmware.bin web/firmware/firmware.bin
           ls -lh web/firmware/
 
       - name: Generate ESP Web Tools manifest
