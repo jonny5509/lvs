@@ -25,10 +25,10 @@ jobs:
         run: python -m pip install --upgrade platformio
       - name: Build ESP32 firmware
         run: pio run -e esp32dev
-      - name: Upload ESP32 firmware artifact
+      - name: Upload ESP32 build binaries
         uses: actions/upload-artifact@v4
         with:
-          name: lvs-esp32dev-firmware
-          path: .pio/build/esp32dev/firmware.bin
+          name: lvs-esp32dev-build
+          path: .pio/build/esp32dev/*.bin
           if-no-files-found: error
           retention-days: 30
