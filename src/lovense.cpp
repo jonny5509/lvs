@@ -6,28 +6,32 @@
 
 #include "muse.h"
 
-/**
- * 
- * PROTOCOL SPECIFICATION SEE 
- * 
- * https://buttplug-spec.docs.buttplug.io/docs/stpihkal/protocols/lovense/
- * 
- **/
-
-static const char* TAG = "lovense";
+/*
+ * Community-documented Lovense BLE profile:
+ *   FFF0 service
+ *   FFF1 response/notification characteristic (RX from toy)
+ *   FFF2 command/write characteristic (TX to toy)
+ *
+ * This profile is a compatibility target, not proof that Lovense Connect
+ * accepts a generic ESP32 peripheral. The official app may require additional
+ * identity, advertising, or protocol behavior.
+ */
 
 #define LOVENSE_SERVICE_UUID "0000fff0-0000-1000-8000-00805f9b34fb"
-#define LOVENSE_CHARACTERISTIC_UUID "0000fff0-0000-1000-8000-00805f9b34fb"
+#define LOVENSE_RX_CHARACTERISTIC_UUID "0000fff1-0000-1000-8000-00805f9b34fb"
+#define LOVENSE_TX_CHARACTERISTIC_UUID "0000fff2-0000-1000-8000-00805f9b34fb"
 
-static NimBLECharacteristic *pLovenseCharacteristic = nullptr;
+static NimBLECharacteristic *pLovenseRxCharacteristic = nullptr;
 
 class ConnectionEventHandler : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer *pServer) {
+    void onConnect(NimBLEServer *pServer) override {
         (void)pServer;
     }
 
-    void onDisconnect(NimBLEServer *pServer) {
+    void onDisconnect(NimBLEServer *pServer) override {
         (void)pServer;
+        // Allow the phone to reconnect after it disconnects.
+        NimBLEDevice::startAdvertising();
     }
 };
 
@@ -44,33 +48,30 @@ std::string generate_response(const std::string& command) {
         return set_vibration_speed(command);
     } else if (command == "PowerOff;") {
         return set_vibration_speed("Vibrate:0;");
-    } else {
-        return "OK;";
     }
+    return "OK;";
 }
 
 std::string get_device_info() {
-    std::string firmwareVersion = "01";
-    std::string deviceType = "G";
+    const std::string firmwareVersion = "01";
+    const std::string deviceType = "G";
 
-    // Retrieve MAC address as bytes
-    uint8_t mac[6];
+    uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
-    // Generate the full MAC address
-    char macAddressStr[18];
-    sprintf(macAddressStr, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    char macAddressStr[13];
+    snprintf(macAddressStr, sizeof(macAddressStr), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     return deviceType + ":" + firmwareVersion + ":" + macAddressStr + ";";
 }
 
 std::string get_battery_level() {
-    // Always reply with 100 for battery level
+    // Placeholder: this board has no battery gauge wired into the firmware.
     return "100;";
 }
 
 std::string get_device_status() {
-    // Always reply with 2 (normal)
     return "2;";
 }
 
@@ -102,63 +103,64 @@ std::string set_auto_switch_options(const std::string& command) {
 }
 
 std::string set_vibration_speed(const std::string& command) {
-    // Extract the speed value from the command (e.g., "Vibrate:10;" -> "10")
-    size_t startPos = command.find(":") + 1;
-    size_t endPos = command.find(";");
-    if (startPos == std::string::npos || endPos == std::string::npos || endPos <= startPos) {
+    const size_t colon = command.find(':');
+    const size_t end = command.find(';');
+    if (colon == std::string::npos || end == std::string::npos || end <= colon + 1) {
         return "Invalid command;";
     }
 
-    std::string speedStr = command.substr(startPos, endPos - startPos);
-    int speedInt = std::stoi(speedStr);
+    int speedInt = 0;
+    try {
+        speedInt = std::stoi(command.substr(colon + 1, end - colon - 1));
+    } catch (...) {
+        return "Invalid command;";
+    }
 
-    // Convert the integer speed value to a floating-point value between 0.0 and 1.0
-    float speed = static_cast<float>(speedInt) / 20.0f;
-
-    muse_set_intensity(speed);
-
+    speedInt = constrain(speedInt, 0, 20);
+    muse_set_intensity(static_cast<float>(speedInt) / 20.0f);
     return "OK;";
 }
 
 class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
 public:
-    void onWrite(NimBLECharacteristic *pCharacteristic) {
-        std::string value = pCharacteristic->getValue();
-        if (value.empty()) {
-            return; // No value received, nothing to do
+    void onWrite(NimBLECharacteristic *pCharacteristic) override {
+        const std::string command = pCharacteristic->getValue();
+        if (command.empty() || pLovenseRxCharacteristic == nullptr) {
+            return;
         }
 
-        std::string response = generate_response(value);
-
-        // Send the response
-        pCharacteristic->setValue(response);
-        pCharacteristic->notify();
+        const std::string response = generate_response(command);
+        pLovenseRxCharacteristic->setValue(response);
+        pLovenseRxCharacteristic->notify();
     }
 };
 
 void lovense_init() {
-    // Get the global server
     NimBLEServer *pServer = NimBLEDevice::getServer();
+    if (pServer == nullptr) {
+        return;
+    }
 
-    // Set the connection event handler
     pServer->setCallbacks(new ConnectionEventHandler());
 
-    // Create a new service
     NimBLEService *pService = pServer->createService(LOVENSE_SERVICE_UUID);
 
-    // Create a new characteristic for the lovense data
-    pLovenseCharacteristic = pService->createCharacteristic(
-        LOVENSE_CHARACTERISTIC_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE
+    // Responses are read/notify; commands arrive on a separate write endpoint.
+    pLovenseRxCharacteristic = pService->createCharacteristic(
+        LOVENSE_RX_CHARACTERISTIC_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
- 
 
-    pLovenseCharacteristic->setCallbacks(new CharacteristicCallbacks());
+    NimBLECharacteristic *pLovenseTxCharacteristic = pService->createCharacteristic(
+        LOVENSE_TX_CHARACTERISTIC_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    );
 
-    // Start the service
+    pLovenseRxCharacteristic->setValue("OK;");
+    pLovenseTxCharacteristic->setCallbacks(new CharacteristicCallbacks());
+
     pService->start();
 
-    // Start advertising the services
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(LOVENSE_SERVICE_UUID);
 }
