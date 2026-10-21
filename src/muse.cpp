@@ -4,15 +4,14 @@
 #include <freertos/task.h>
 #include <muse.h>
 
-static const char* TAG = "muse";
-
 static uint16_t MANUFACTURER_ID = 0xFFF0;
 
 #define MANUFACTURER_DATA_LENGTH 11
 #define MANUFACTURER_DATA_PREFIX 0x6D, 0xB6, 0x43, 0xCE, 0x97, 0xFE, 0x42, 0x7C
 
-static uint8_t _intensity_value = 0;
-static bool _stopping = false;
+// Documented payloads for compatible MuSE/LoveSpouse toys.
+static volatile uint8_t _intensity_value = 0;
+static volatile bool _stopping = false;
 
 uint8_t manufacturerDataList[][MANUFACTURER_DATA_LENGTH] = {
     // Stop all channels
@@ -42,6 +41,8 @@ uint8_t manufacturerDataList[][MANUFACTURER_DATA_LENGTH] = {
 };
 
 void set_manufacturer_data(uint8_t index) {
+  // Only the first four entries represent the supported all-channel intensity
+  // levels. Do not accidentally select a channel-specific payload.
   if (index >= 4) {
     index = 0;
   }
@@ -60,24 +61,25 @@ void set_manufacturer_data(uint8_t index) {
 
 void muse_advertising_task(void *pvParameters) {
   (void)pvParameters;
+  uint8_t lastSetIntensity = 0xFF;
 
   while (!_stopping) {
-    set_manufacturer_data(_intensity_value);
-    delay(1000);
+    const uint8_t requestedIntensity = _intensity_value;
+    // Do not repeatedly stop/restart advertising while the intensity is stable:
+    // that can interrupt BLE discovery and toy command broadcasts.
+    if (requestedIntensity != lastSetIntensity) {
+      set_manufacturer_data(requestedIntensity);
+      lastSetIntensity = requestedIntensity;
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 
-  // Advertise stop-all briefly before task exit.
-  for (uint8_t i = 0; i < 10; i++) {
-    set_manufacturer_data(0);
-    delay(200);
-  }
+  set_manufacturer_data(0);
   vTaskDelete(nullptr);
 }
 
 void muse_set_intensity(float intensity_percent) {
-  // Only four command patterns exist: stop, speed 1, speed 2, speed 3.
-  // Clamp before quantizing so 100% maps to index 3, never the dual-channel
-  // command entries at indices 4 and above.
+  // Stop + three documented all-channel speed levels.
   if (std::isnan(intensity_percent) || intensity_percent <= 0.0f) {
     _intensity_value = 0;
     return;
@@ -86,10 +88,12 @@ void muse_set_intensity(float intensity_percent) {
     _intensity_value = 3;
     return;
   }
-  _intensity_value = static_cast<uint8_t>(lroundf(intensity_percent * 3.0f));
-  if (_intensity_value > 3) {
-    _intensity_value = 3;
+
+  uint8_t level = static_cast<uint8_t>(lroundf(intensity_percent * 3.0f));
+  if (level > 3) {
+    level = 3;
   }
+  _intensity_value = level;
 }
 
 void muse_start() {
