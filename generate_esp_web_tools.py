@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 
-import os
 import json
-import glob
+import os
+from pathlib import Path
 
-def find_firmware_name(endswith=".bin"):
-    firmware_directory = "web/firmware/"
-    firmware_files = glob.glob(os.path.join(firmware_directory, f"*{endswith}"))
-    if firmware_files:
-        return os.path.splitext(os.path.basename(firmware_files[0]))[0]
-    return None
+FIRMWARE_DIR = Path("web/firmware")
+REQUIRED_FILES = ("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")
 
 def fill_manifest(github_username, github_project, github_build_number):
-    firmware_name = find_firmware_name()
-    if firmware_name is None:
-        raise ValueError("No firmware files found in the 'web/firmware/' directory with '.bin' extension.")
+    missing = [name for name in REQUIRED_FILES if not (FIRMWARE_DIR / name).is_file()]
+    if missing:
+        raise ValueError(f"Missing firmware parts in {FIRMWARE_DIR}: {', '.join(missing)}")
 
     return {
         "name": f"{github_username}/{github_project}",
@@ -22,30 +18,22 @@ def fill_manifest(github_username, github_project, github_build_number):
         "funding_url": f"https://github.com/{github_username}/{github_project}/contributors",
         "builds": [
             {
-                "chipFamily": "ESP32",
-                "parts": [
-                    {"path": f"firmware/{find_firmware_name('esp32.bin')}.bin", "offset": 0}
-                ]
-            },
-            {
                 "chipFamily": "ESP32-S3",
                 "parts": [
-                    {"path": f"firmware/{find_firmware_name('esp32s3.bin')}.bin", "offset": 0}
+                    {"path": "firmware/bootloader.bin", "offset": 0},
+                    {"path": "firmware/partitions.bin", "offset": 32768},
+                    {"path": "firmware/boot_app0.bin", "offset": 57344},
+                    {"path": "firmware/firmware.bin", "offset": 65536}
                 ]
             }
         ]
     }
 
 if __name__ == "__main__":
-    # Retrieve values from GitHub Actions environment variables
-    github_username, github_project = os.environ.get("GITHUB_REPOSITORY", 'user/repo').split('/')
-    github_build_number = os.environ.get("GITHUB_RUN_NUMBER", '0')
-
+    github_username, github_project = os.environ.get("GITHUB_REPOSITORY", "user/repo").split("/", 1)
+    github_build_number = os.environ.get("GITHUB_RUN_NUMBER", "0")
     manifest_data = fill_manifest(github_username, github_project, github_build_number)
-
-    output_file = "web/esp-webtools-manifest.json"
-
-    with open(output_file, 'w') as file:
-        json.dump(manifest_data, file, indent=2)
-
-    print(f"Manifest has been filled and saved as {output_file}")
+    output_file = Path("web/esp-webtools-manifest.json")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+    print(f"Manifest generated: {output_file}")
