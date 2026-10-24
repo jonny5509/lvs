@@ -1,15 +1,57 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LVS-Gateway Installer</title>
+  <meta name="theme-color" content="#10131b">
+  <title>LVS Gateway · Web Installer</title>
   <script type="module" src="https://unpkg.com/esp-web-tools@9.4.0/dist/web/install-button.js?module"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#10131b;--panel:#181d29;--line:#2b3344;--muted:#9aa6ba;--text:#f3f6fc;--accent:#9cf0ce;--accent-ink:#10251e}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#203b3c 0,transparent 36%),var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+    a{color:var(--accent)}.wrap{width:min(1080px,calc(100% - 32px));margin:auto}.top{display:flex;align-items:center;justify-content:space-between;padding:26px 0}.brand{display:flex;gap:12px;align-items:center;font-weight:750;letter-spacing:.02em}.logo{display:grid;place-items:center;width:42px;height:42px;border:1px solid #426c63;background:#203b37;border-radius:13px;color:var(--accent);font-size:21px}.pill{font-size:12px;color:var(--accent);border:1px solid #426c63;border-radius:99px;padding:5px 10px}
+    .hero{padding:54px 0 34px;max-width:760px}.eyebrow{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.hero h1{font-size:clamp(38px,7vw,68px);line-height:1.02;letter-spacing:-.055em;margin:16px 0}.hero p{font-size:18px;color:var(--muted);max-width:620px}
+    .grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.8fr);gap:18px;padding-bottom:64px}.panel{background:linear-gradient(145deg,#1b2230,#151a25);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:0 18px 55px #0002}.panel h2{font-size:20px;margin:0 0 8px}.muted{color:var(--muted)}.step{display:flex;gap:14px;margin:22px 0}.num{flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#293444;color:var(--accent);font-weight:750}.step strong{display:block;margin-bottom:3px}.install{margin-top:24px;padding:20px;border:1px dashed #46566a;border-radius:16px;background:#121722}.install p{margin:0 0 14px;color:var(--muted);font-size:14px}
+    esp-web-install-button{display:block}esp-web-install-button::part(button){background:var(--accent);color:var(--accent-ink);font:750 15px system-ui;border:0;border-radius:12px;padding:13px 20px;min-height:48px;cursor:pointer}
+    .notice{display:flex;gap:10px;padding:13px 14px;border-radius:12px;background:#272a24;color:#d7d9bd;font-size:13px;margin-top:18px}.notice span{font-size:17px}.feature{padding:15px 0;border-bottom:1px solid var(--line)}.feature:last-child{border:0;padding-bottom:0}.feature strong{display:block}.feature p{margin:4px 0 0;font-size:14px;color:var(--muted)}.footer{padding:20px 0 34px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}.hero{padding-top:30px}.top{padding:18px 0}.panel{padding:21px}.pill{display:none}}
+  </style>
 </head>
 <body>
-  <h1>Install LVS-Gateway</h1>
-  <p>Connect your ESP32 board with a USB data cable, then choose Connect to install the firmware.</p>
-  <p>Open this installer from its hosted HTTPS page, not by opening index.html directly from your computer.</p>
-  <esp-web-install-button manifest="./esp-webtools-manifest.json"></esp-web-install-button>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand"><div class="logo" aria-hidden="true">L</div><span>LVS Gateway</span></div>
+      <span class="pill">ESP32 · Web Installer</span>
+    </header>
+    <main>
+      <section class="hero">
+        <div class="eyebrow">Setup portal</div>
+        <h1>Your gateway.<br>Ready when you are.</h1>
+        <p>Install LVS Gateway firmware directly from your browser. No separate flashing utility is needed—just a supported browser and a USB data connection.</p>
+      </section>
+      <section class="grid" aria-label="Setup">
+        <article class="panel">
+          <h2>Install firmware</h2>
+          <p class="muted">Follow these steps to safely flash your ESP32.</p>
+          <div class="step"><div class="num">1</div><div><strong>Connect your board</strong><span class="muted">Use a USB data cable and connect the ESP32 to this computer.</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>Choose Connect</strong><span class="muted">Select your board's serial port in the browser dialog.</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>Confirm and install</strong><span class="muted">Follow the installer prompts and keep the board connected until it finishes.</span></div></div>
+          <div class="install">
+            <p>The installer requires a Chromium-based browser with Web Serial support, such as Chrome or Edge, and this page must be served over HTTPS.</p>
+            <esp-web-install-button manifest="./esp-webtools-manifest.json"></esp-web-install-button>
+          </div>
+          <div class="notice"><span aria-hidden="true">ⓘ</span><div><strong>Having trouble connecting?</strong><br>Close serial monitors or other flashing tools. If the board will not connect, hold BOOT while the installer starts connecting, then release it.</div></div>
+        </article>
+        <aside class="panel">
+          <h2>Before you begin</h2>
+          <div class="feature"><strong>USB data cable</strong><p>Some cables provide power only and cannot flash firmware.</p></div>
+          <div class="feature"><strong>Supported board</strong><p>Use a compatible ESP32 or ESP32-S3 board for the firmware build you intend to install.</p></div>
+          <div class="feature"><strong>Keep power connected</strong><p>Do not unplug or reset the board while flashing is in progress.</p></div>
+          <div class="feature"><strong>Need the source?</strong><p>Review the <a href="https://github.com/jonny5509/lvs">repository</a> for build instructions, firmware code, and project updates.</p></div>
+        </aside>
+      </section>
+    </main>
+    <footer class="footer"><span>LVS Gateway · Community firmware</span><span>Firmware installation only — device controls are not exposed by this page.</span></footer>
+  </div>
 </body>
 </html>
